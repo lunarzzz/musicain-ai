@@ -8,6 +8,7 @@ venv/
 node_modules/
 dist/
 docs/
+deep-research-report.md
 
 # ── IDE ──
 .idea/
