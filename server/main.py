@@ -120,14 +120,15 @@ async def quick_actions():
 @app.get("/api/skills")
 async def list_skills():
     """获取可用的 Skills 列表"""
-    from skills.router import ALL_SKILLS
+    from skill_loader import load_all_skills
+    skills = load_all_skills()
     return [
         {
             "name": s.name,
             "description": s.description,
             "trigger_keywords": s.trigger_keywords,
         }
-        for s in ALL_SKILLS
+        for s in skills
     ]
 
 
