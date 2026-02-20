@@ -1,0 +1,20 @@
+# Render.com 部署配置 — 后端
+# 文档: https://render.com/docs/deploy-fastapi
+
+services:
+  - type: web
+    name: musician-ai-server
+    runtime: python
+    region: singapore  # 离中国最近的节点
+    plan: free
+    buildCommand: cd server && pip install -r requirements.txt
+    startCommand: cd server && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: LLM_API_KEY
+        sync: false  # 在 Render 控制台手动设置
+      - key: LLM_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: LLM_MODEL
+        value: google/gemini-2.0-flash-001
+      - key: CORS_ORIGINS
+        value: https://musician-ai.vercel.app,http://localhost:5173
