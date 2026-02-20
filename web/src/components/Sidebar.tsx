@@ -10,20 +10,24 @@ interface Conversation {
 interface SidebarProps {
     conversations: Conversation[];
     activeId: string | null;
+    isOpen: boolean;
     onSelect: (id: string) => void;
     onNew: () => void;
     onDelete: (id: string) => void;
+    onClose: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
     conversations,
     activeId,
+    isOpen,
     onSelect,
     onNew,
     onDelete,
+    onClose,
 }) => {
     return (
-        <div className="sidebar">
+        <div className={`sidebar ${isOpen ? 'open' : ''}`}>
             <div className="sidebar-header">
                 <div className="sidebar-logo">
                     <div className="sidebar-logo-icon">🎵</div>
@@ -32,6 +36,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <div className="sidebar-logo-sub">Musician Copilot</div>
                     </div>
                 </div>
+                <button className="mobile-close-btn" onClick={onClose} aria-label="关闭侧边栏">
+                    ×
+                </button>
+            </div>
+
+            <div className="sidebar-actions">
                 <button className="new-chat-btn" onClick={onNew}>
                     <span>✨</span> 新对话
                 </button>

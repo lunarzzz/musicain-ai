@@ -31,9 +31,10 @@ interface QuickAction {
 interface ChatPageProps {
     conversationId: string | null;
     onConversationCreated: (id: string) => void;
+    onMenuClick: () => void;
 }
 
-export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversationCreated }) => {
+export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversationCreated, onMenuClick }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -215,8 +216,18 @@ export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversati
 
     return (
         <div className="main-content">
+            {/* 移动端顶部导航栏 */}
+            <div className="mobile-header">
+                <button className="mobile-menu-btn" onClick={onMenuClick} aria-label="打开侧边栏">
+                    ☰
+                </button>
+                <span className="mobile-header-title">
+                    {conversationId ? '聊天对话' : '✨ 新对话'}
+                </span>
+            </div>
+
             {showWelcome ? (
-                <>
+                <div className="welcome-container">
                     <QuickActions actions={quickActions} onSelect={sendMessage} />
                     <div className="input-area">
                         <div className="input-container">
@@ -239,9 +250,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversati
                             </button>
                         </div>
                     </div>
-                </>
+                </div>
             ) : (
-                <>
+                <div className="chat-container">
                     <div className="messages-container">
                         <div className="messages-list">
                             {messages.map((msg) => (
@@ -278,7 +289,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversati
                             </button>
                         </div>
                     </div>
-                </>
+                </div>
             )}
         </div>
     );

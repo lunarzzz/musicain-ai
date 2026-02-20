@@ -15,6 +15,7 @@ interface Conversation {
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -34,10 +35,12 @@ function App() {
 
   const handleNewChat = () => {
     setActiveConvId(null);
+    setIsSidebarOpen(false);
   };
 
   const handleSelectConversation = (id: string) => {
     setActiveConvId(id);
+    setIsSidebarOpen(false); // 手机端点选后自动收起
   };
 
   const handleDeleteConversation = async (id: string) => {
@@ -63,13 +66,23 @@ function App() {
       <Sidebar
         conversations={conversations}
         activeId={activeConvId}
+        isOpen={isSidebarOpen}
         onSelect={handleSelectConversation}
         onNew={handleNewChat}
         onDelete={handleDeleteConversation}
+        onClose={() => setIsSidebarOpen(false)}
       />
+      {/* 移动端遮罩 */}
+      {isSidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
       <ChatPage
         conversationId={activeConvId}
         onConversationCreated={handleConversationCreated}
+        onMenuClick={() => setIsSidebarOpen(true)}
       />
     </div>
   );
