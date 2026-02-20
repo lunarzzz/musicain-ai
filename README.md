@@ -98,8 +98,118 @@ LLM_API_KEY=sk-xxx
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
 
+# OpenRouter (聚合多模型，推荐)
+LLM_API_KEY=sk-or-v1-xxx
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_MODEL=google/gemini-2.0-flash-001
+
 # 混元
 LLM_API_KEY=xxx
 LLM_BASE_URL=https://api.hunyuan.cloud.tencent.com/v1
 LLM_MODEL=hunyuan-pro
 ```
+
+## 🚀 线上部署（免费方案）
+
+采用 **Vercel（前端）+ Render（后端）** 组合，均有免费额度。
+
+### 前置：推送代码到 GitHub
+
+```bash
+git add .
+git commit -m "feat: musician AI assistant MVP"
+git remote add origin git@github.com:你的用户名/musicain-ai.git
+git push -u origin main
+```
+
+### Step 1：部署后端到 Render
+
+1. 打开 [render.com](https://render.com)，用 GitHub 登录
+2. 点击 **New → Web Service** → 选择 `musicain-ai` 仓库
+3. 填写配置：
+
+| 配置项 | 值 |
+|---|---|
+| **Name** | `musician-ai-server` |
+| **Region** | `Singapore`（离中国最近） |
+| **Runtime** | `Python` |
+| **Root Directory** | `server` |
+| **Build Command** | `pip install -r requirements.txt` |
+| **Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| **Plan** | `Free` |
+
+4. 在 **Environment Variables** 中添加以下变量：
+
+| 环境变量 | 值 |
+|---|---|
+| `LLM_API_KEY` | 你的 API Key（如 OpenRouter: `sk-or-v1-xxx`） |
+| `LLM_BASE_URL` | `https://openrouter.ai/api/v1` |
+| `LLM_MODEL` | `google/gemini-2.0-flash-001` |
+| `CORS_ORIGINS` | `https://你的域名.vercel.app,http://localhost:5173` |
+
+5. 点击 **Create Web Service** → 等待构建完成
+6. 构建成功后获得后端 URL，如：`https://musician-ai-server.onrender.com`
+
+> 💡 **验证后端**：访问 `https://你的后端URL/api/health`，应返回 `{"status":"ok","version":"0.1.0"}`
+
+### Step 2：更新前端代理地址
+
+编辑 `web/vercel.json`，将 `destination` 改为你的实际 Render URL：
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://你的后端URL.onrender.com/api/:path*"
+    }
+  ]
+}
+```
+
+提交并推送：
+
+```bash
+git add web/vercel.json
+git commit -m "fix: update backend proxy URL"
+git push
+```
+
+### Step 3：部署前端到 Vercel
+
+1. 打开 [vercel.com](https://vercel.com)，用 GitHub 登录
+2. 点击 **New Project** → 导入 `musicain-ai` 仓库
+3. 填写配置：
+
+| 配置项 | 值 |
+|---|---|
+| **Framework Preset** | `Vite` |
+| **Root Directory** | `web` |
+| 其余 | 保持默认 |
+
+4. 点击 **Deploy** → 约 30 秒完成 🎉
+5. 部署成功后获得前端 URL，如：`https://musicain-ai.vercel.app`
+
+### Step 4：更新 Render CORS
+
+回到 Render 控制台 → 你的 Web Service → **Environment** → 修改 `CORS_ORIGINS` 为你的实际 Vercel 域名：
+
+```
+https://musicain-ai.vercel.app,http://localhost:5173
+```
+
+保存后 Render 会自动重启服务。
+
+### 部署完成 ✅
+
+访问 `https://你的域名.vercel.app` 即可使用。
+
+### ⚠️ 注意事项
+
+| 项目 | 说明 |
+|---|---|
+| **Render 免费版休眠** | 15 分钟无请求会休眠，首次唤醒约 30~50 秒。可用 [UptimeRobot](https://uptimerobot.com) 免费定时 ping 保活 |
+| **SQLite 持久化** | Render 免费版文件系统不持久，重启后对话记录丢失。正式使用建议换 Render 免费 PostgreSQL |
+| **LLM 费用** | OpenRouter 按 token 收费，Gemini Flash 约 $0.075/百万 token，日常使用几乎免费 |
+| **自定义域名** | Vercel 和 Render 均支持绑定自定义域名（免费） |
+
