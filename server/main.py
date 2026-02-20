@@ -112,8 +112,22 @@ async def quick_actions():
         {"id": "promote", "icon": "🚀", "label": "推歌建议", "prompt": "帮我分析一下我该推哪首歌"},
         {"id": "portrait", "icon": "👥", "label": "听众画像", "prompt": "帮我看看我的听众画像"},
         {"id": "data", "icon": "📊", "label": "数据分析", "prompt": "最近播放量有什么变化？"},
-        {"id": "upload", "icon": "📤", "label": "上传预检", "prompt": "上传歌曲需要什么格式？"},
-        {"id": "events", "icon": "🎉", "label": "近期活动", "prompt": "最近有什么音乐人活动？"},
+        {"id": "creation_flow", "icon": "✨", "label": "全流程创作", "prompt": "帮我从热点到创作一条龙完成"},
+        {"id": "promo_flow", "icon": "📋", "label": "全链路宣推", "prompt": "帮我做一套完整宣推方案"},
+    ]
+
+
+@app.get("/api/skills")
+async def list_skills():
+    """获取可用的 Skills 列表"""
+    from skills.router import ALL_SKILLS
+    return [
+        {
+            "name": s.name,
+            "description": s.description,
+            "trigger_keywords": s.trigger_keywords,
+        }
+        for s in ALL_SKILLS
     ]
 
 

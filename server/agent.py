@@ -17,6 +17,7 @@ from langchain_openai import ChatOpenAI
 from config import settings
 from models import CardData, CardType, Evidence, StreamChunk
 import database as db
+from skills.router import route as route_skill, get_skills_description
 
 # ── 导入所有 Tools ────────────────────────────────────
 
@@ -64,7 +65,8 @@ SYSTEM_PROMPT = """你是「腾讯音乐人 AI 助手」，一个专业的音乐
 - 不要编造不存在的数据，只使用工具返回的真实数据
 - 如果用户的问题超出你的能力范围，友好地说明并建议替代方案
 - 在给出建议时，尽量附带理由和依据
-"""
+
+""" + "\n\n" + get_skills_description()
 
 
 # ── Agent 核心 ─────────────────────────────────────────
@@ -202,88 +204,129 @@ async def chat(user_msg: str, conversation_id: str | None = None) -> AsyncGenera
     # 4. 构建消息
     messages = _build_messages(history[:-1], user_msg)  # 排除刚存的用户消息
 
-    # 5. 初始化 LLM（绑定工具）
-    llm = _get_llm()
-    llm_with_tools = llm.bind_tools(ALL_TOOLS)
+    # 5. Skill 路由：判断是否走多步编排
+    matched_skill = route_skill(user_msg)
 
-    # 6. 调用 LLM
     all_cards = []
-    all_evidence = []
     full_content = ""
     message_id = uuid.uuid4().hex[:16]
 
-    try:
-        # 第一轮：LLM 决定是否调用工具
-        response = await llm_with_tools.ainvoke(messages)
+    if matched_skill:
+        # ── Skill 模式：多步工作流 ──
+        try:
+            async for chunk in matched_skill.execute(user_msg, {}, TOOL_MAP):
+                chunk_type = chunk.get("type")
 
-        # 处理工具调用
-        if response.tool_calls:
-            # 执行所有工具调用
-            tool_messages = [response]
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                tool_fn = TOOL_MAP.get(tool_name)
+                if chunk_type == "step_start":
+                    step_chunk = json.dumps({
+                        "type": "token",
+                        "content": f"\n{chunk['description']}\n",
+                    }, ensure_ascii=False)
+                    full_content += f"\n{chunk['description']}\n"
+                    yield f"data: {step_chunk}\n\n"
 
-                if tool_fn:
-                    try:
-                        result = await tool_fn.ainvoke(tool_args)
-                        if isinstance(result, str):
-                            result = json.loads(result)
-                    except Exception as e:
-                        result = {"error": str(e)}
+                elif chunk_type == "card":
+                    all_cards.append(chunk["card"])
+                    card_chunk = json.dumps({
+                        "type": "card",
+                        "card": chunk["card"],
+                    }, ensure_ascii=False)
+                    yield f"data: {card_chunk}\n\n"
 
-                    # 提取卡片
-                    cards = _extract_cards(tool_name, result)
-                    all_cards.extend(cards)
+                elif chunk_type == "token":
+                    full_content += chunk.get("content", "")
+                    token_chunk = json.dumps({
+                        "type": "token",
+                        "content": chunk["content"],
+                    }, ensure_ascii=False)
+                    yield f"data: {token_chunk}\n\n"
 
-                    # 发送卡片 chunk
-                    for card in cards:
-                        card_chunk = json.dumps({
-                            "type": "card",
-                            "card": card,
-                        }, ensure_ascii=False)
-                        yield f"data: {card_chunk}\n\n"
+                elif chunk_type == "done":
+                    pass  # 下面统一处理
 
-                    # 构建工具响应消息
-                    from langchain_core.messages import ToolMessage
-                    tool_messages.append(
-                        ToolMessage(
-                            content=json.dumps(result, ensure_ascii=False),
-                            tool_call_id=tool_call["id"],
+        except Exception as e:
+            error_msg = f"技能执行出错：{str(e)}"
+            full_content = error_msg
+            error_chunk = json.dumps({"type": "error", "content": error_msg}, ensure_ascii=False)
+            yield f"data: {error_chunk}\n\n"
+
+    else:
+        # ── Tool 模式：单步 Function Calling ──
+        llm = _get_llm()
+        llm_with_tools = llm.bind_tools(ALL_TOOLS)
+
+        try:
+            # 第一轮：LLM 决定是否调用工具
+            response = await llm_with_tools.ainvoke(messages)
+
+            # 处理工具调用
+            if response.tool_calls:
+                # 执行所有工具调用
+                tool_messages = [response]
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    tool_fn = TOOL_MAP.get(tool_name)
+
+                    if tool_fn:
+                        try:
+                            result = await tool_fn.ainvoke(tool_args)
+                            if isinstance(result, str):
+                                result = json.loads(result)
+                        except Exception as e:
+                            result = {"error": str(e)}
+
+                        # 提取卡片
+                        cards = _extract_cards(tool_name, result)
+                        all_cards.extend(cards)
+
+                        # 发送卡片 chunk
+                        for card in cards:
+                            card_chunk = json.dumps({
+                                "type": "card",
+                                "card": card,
+                            }, ensure_ascii=False)
+                            yield f"data: {card_chunk}\n\n"
+
+                        # 构建工具响应消息
+                        from langchain_core.messages import ToolMessage
+                        tool_messages.append(
+                            ToolMessage(
+                                content=json.dumps(result, ensure_ascii=False),
+                                tool_call_id=tool_call["id"],
+                            )
                         )
-                    )
 
-            # 第二轮：LLM 基于工具结果生成最终回答
-            messages.extend(tool_messages)
-            async for chunk in llm.astream(messages):
-                if chunk.content:
-                    full_content += chunk.content
-                    token_chunk = json.dumps({
-                        "type": "token",
-                        "content": chunk.content,
-                    }, ensure_ascii=False)
-                    yield f"data: {token_chunk}\n\n"
+                # 第二轮：LLM 基于工具结果生成最终回答
+                messages.extend(tool_messages)
+                async for chunk in llm.astream(messages):
+                    if chunk.content:
+                        full_content += chunk.content
+                        token_chunk = json.dumps({
+                            "type": "token",
+                            "content": chunk.content,
+                        }, ensure_ascii=False)
+                        yield f"data: {token_chunk}\n\n"
 
-        else:
-            # 无工具调用，直接流式输出
-            async for chunk in llm_with_tools.astream(messages):
-                if chunk.content:
-                    full_content += chunk.content
-                    token_chunk = json.dumps({
-                        "type": "token",
-                        "content": chunk.content,
-                    }, ensure_ascii=False)
-                    yield f"data: {token_chunk}\n\n"
+            else:
+                # 无工具调用，直接流式输出
+                async for chunk in llm_with_tools.astream(messages):
+                    if chunk.content:
+                        full_content += chunk.content
+                        token_chunk = json.dumps({
+                            "type": "token",
+                            "content": chunk.content,
+                        }, ensure_ascii=False)
+                        yield f"data: {token_chunk}\n\n"
 
-    except Exception as e:
-        error_msg = f"抱歉，处理您的请求时遇到了问题：{str(e)}"
-        full_content = error_msg
-        error_chunk = json.dumps({
-            "type": "error",
-            "content": error_msg,
-        }, ensure_ascii=False)
-        yield f"data: {error_chunk}\n\n"
+        except Exception as e:
+            error_msg = f"抱歉，处理您的请求时遇到了问题：{str(e)}"
+            full_content = error_msg
+            error_chunk = json.dumps({
+                "type": "error",
+                "content": error_msg,
+            }, ensure_ascii=False)
+            yield f"data: {error_chunk}\n\n"
 
     # 7. 保存助手消息
     db.save_message(
