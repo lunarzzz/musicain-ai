@@ -19,4 +19,4 @@ services:
       - key: LLM_MODEL
         value: google/gemini-2.0-flash-001
       - key: CORS_ORIGINS
-        value: https://musician-ai.vercel.app,http://localhost:5173
+        value: https://musicain-ai-vercel.vercel.app,http://localhost:5173
