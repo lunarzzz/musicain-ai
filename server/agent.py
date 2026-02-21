@@ -239,23 +239,39 @@ async def chat(user_msg: str, conversation_id: str | None = None) -> AsyncGenera
 
     try:
         # 第一轮：LLM 决定是否调用工具
+        import logging
+        logger = logging.getLogger("agent")
+        logger.info("[Agent] 第一轮调用 LLM (ainvoke)...")
         response = await llm_with_tools.ainvoke(messages)
+        logger.info(f"[Agent] 第一轮完成 — content长度={len(response.content or '')}, tool_calls数量={len(response.tool_calls or [])}")
 
         # 处理工具调用
         if response.tool_calls:
+            # 如果 LLM 同时返回了文本内容（如"好的，正在为您查询…"），先发给前端
+            if response.content:
+                full_content += response.content
+                token_chunk = json.dumps({
+                    "type": "token",
+                    "content": response.content,
+                }, ensure_ascii=False)
+                yield f"data: {token_chunk}\n\n"
+
             # 执行所有工具调用
             tool_messages = [response]
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
                 tool_fn = TOOL_MAP.get(tool_name)
+                logger.info(f"[Agent] 调用工具: {tool_name}, 参数: {tool_args}")
 
                 if tool_fn:
                     try:
                         result = await tool_fn.ainvoke(tool_args)
                         if isinstance(result, str):
                             result = json.loads(result)
+                        logger.info(f"[Agent] 工具 {tool_name} 返回成功")
                     except Exception as e:
+                        logger.error(f"[Agent] 工具 {tool_name} 执行失败: {e}")
                         result = {"error": str(e)}
 
                     # 提取卡片
@@ -278,8 +294,11 @@ async def chat(user_msg: str, conversation_id: str | None = None) -> AsyncGenera
                             tool_call_id=tool_call["id"],
                         )
                     )
+                else:
+                    logger.warning(f"[Agent] 未找到工具: {tool_name}")
 
             # 第二轮：LLM 基于工具结果生成最终回答
+            logger.info("[Agent] 第二轮调用 LLM (astream)...")
             messages.extend(tool_messages)
             async for chunk in llm.astream(messages):
                 if chunk.content:
@@ -289,9 +308,11 @@ async def chat(user_msg: str, conversation_id: str | None = None) -> AsyncGenera
                         "content": chunk.content,
                     }, ensure_ascii=False)
                     yield f"data: {token_chunk}\n\n"
+            logger.info(f"[Agent] 第二轮完成 — 总回复长度={len(full_content)}")
 
         else:
             # 无工具调用，直接流式输出
+            logger.info("[Agent] 无工具调用，直接流式输出...")
             async for chunk in llm_with_tools.astream(messages):
                 if chunk.content:
                     full_content += chunk.content
