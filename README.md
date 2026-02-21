@@ -80,7 +80,7 @@ npm run dev
 │           ├── Sidebar.tsx       # 会话侧边栏
 │           └── QuickActions.tsx  # 快捷操作
 └── docs/
-    └── technical-architecture.md  # 技术架构方案
+    └── multi-agent-architecture.md  # Multi-agent 技术方案
 ```
 
 ## LLM 配置示例
