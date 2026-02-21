@@ -213,3 +213,36 @@ https://musicain-ai.vercel.app,http://localhost:5173
 | **LLM 费用** | OpenRouter 按 token 收费，Gemini Flash 约 $0.075/百万 token，日常使用几乎免费 |
 | **自定义域名** | Vercel 和 Render 均支持绑定自定义域名（免费） |
 
+
+## 本地 RAG 知识库接入（推荐复用 RAGFlow）
+
+如果你希望在当前项目里落地“本地知识库问答”，建议优先复用你们已有的 **RAGFlow 微服务**，当前仓库只负责通过 Tool 调用，不重复造轮子。
+
+### 接入架构
+
+```text
+用户问题 -> 当前 FastAPI Agent -> RAGFlow 检索接口 -> 返回片段/来源 -> LLM 组织答案
+```
+
+### 最小落地步骤
+
+1. 在 `server/tools/knowledge.py` 新增 `ragflow_search(query, top_k, kb_id)` 工具函数
+2. 在 `server/agent.py` 注册该工具，优先用于“规则/流程/FAQ”类问题
+3. 在环境变量新增 `RAGFLOW_BASE_URL`、`RAGFLOW_API_KEY`、`RAGFLOW_KB_ID`
+4. Tool 返回结果中保留 `chunks + sources`，前端展示引用来源
+5. 检索为空时回退到现有 FAQ，再由模型给出保守回答（避免幻觉）
+
+### 参数建议（起步）
+
+- `chunk_size`: 500~1000（中文字符）
+- `chunk_overlap`: 80~150
+- `top_k`: 5
+- 相似度阈值：0.3~0.5（按 embedding 模型微调）
+
+### 工程建议
+
+- 回答必须附来源（文件名/段落）
+- 低置信度时明确拒答并提示补充上下文
+- 维护 30~50 条离线评估问题，持续迭代召回率与正确率
+
+> 如果暂时不接 RAGFlow，也可以用 LangChain + Chroma 做最小替代，但长期建议统一到现有 RAGFlow 体系。
