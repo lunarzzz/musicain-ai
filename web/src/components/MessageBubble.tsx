@@ -24,6 +24,26 @@ interface MessageBubbleProps {
     onCardAction?: (prompt: string) => void;
 }
 
+function stripInternalToolArtifacts(text: string): string {
+    if (!text) return '';
+
+    let cleaned = text;
+
+    // 1) 移除模型偶发输出的内部工具调用代码块
+    cleaned = cleaned.replace(/```tool_code[\s\S]*?```/gi, '');
+
+    // 2) 移除仅包含建议数组的 JSON 代码块（建议已通过 follow_ups 单独展示）
+    cleaned = cleaned.replace(/```json\s*\[[\s\S]*?\]\s*```/gi, '');
+
+    // 3) 去掉孤立的反引号行，避免渲染噪音
+    cleaned = cleaned
+        .split('\n')
+        .filter((line) => line.trim() !== '`')
+        .join('\n');
+
+    return cleaned.trim();
+}
+
 /**
  * 简单的 Markdown 渲染 — 处理 **粗体**, 列表, 代码, 换行
  */
@@ -125,6 +145,7 @@ function formatInline(text: string): React.ReactNode[] {
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCardAction }) => {
     const isUser = message.role === 'user';
+    const assistantContent = isUser ? message.content : stripInternalToolArtifacts(message.content);
 
     return (
         <div className={`message-wrapper ${isUser ? 'user' : 'assistant'}`}>
@@ -136,7 +157,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCardAct
                         {message.cards?.map((card, i) => (
                             <ToolCard key={i} card={card} onAction={onCardAction} />
                         ))}
-                        {message.content && renderMarkdown(message.content)}
+                        {assistantContent && renderMarkdown(assistantContent)}
                         {message.follow_ups && message.follow_ups.length > 0 && onCardAction ? (
                             <div className="follow-up-list">
                                 {message.follow_ups.map((q, i) => (
