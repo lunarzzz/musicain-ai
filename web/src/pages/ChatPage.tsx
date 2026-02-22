@@ -8,6 +8,7 @@ interface Message {
     id: string;
     role: string;
     content: string;
+    follow_ups?: string[];
     cards?: Array<{
         card_type: string;
         title: string;
@@ -62,6 +63,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversati
                             role: m.role as string,
                             content: m.content as string,
                             cards: m.cards as Message['cards'],
+                            follow_ups: m.follow_ups as string[] | undefined,
                         }))
                     );
                 })
@@ -116,12 +118,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversati
 
                 let assistantContent = '';
                 let assistantCards: Message['cards'] = [];
+                let assistantFollowUps: string[] = [];
                 const assistantId = `a-${Date.now()}`;
 
                 // 立即添加一个空的 assistant 消息
                 setMessages((prev) => [
                     ...prev,
-                    { id: assistantId, role: 'assistant', content: '', cards: [] },
+                    { id: assistantId, role: 'assistant', content: '', cards: [], follow_ups: [] },
                 ]);
 
                 let buffer = '';
@@ -162,6 +165,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({ conversationId, onConversati
                                         prev.map((m) =>
                                             m.id === assistantId
                                                 ? { ...m, cards: assistantCards }
+                                                : m
+                                        )
+                                    );
+                                    break;
+
+                                case 'follow_ups':
+                                    assistantFollowUps = Array.isArray(chunk.questions) ? chunk.questions : [];
+                                    setMessages((prev) =>
+                                        prev.map((m) =>
+                                            m.id === assistantId
+                                                ? { ...m, follow_ups: assistantFollowUps }
                                                 : m
                                         )
                                     );

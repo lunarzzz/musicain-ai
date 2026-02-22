@@ -67,15 +67,17 @@ class ChatResponse(BaseModel):
     message_id: str
     content: str
     cards: list[CardData] = []
+    follow_ups: list[str] = []
     evidence: list[Evidence] = []
     created_at: datetime = Field(default_factory=datetime.now)
 
 
 class StreamChunk(BaseModel):
     """SSE 流式响应 chunk"""
-    type: str  # "token" | "card" | "evidence" | "done" | "error"
+    type: str  # "token" | "card" | "follow_ups" | "evidence" | "done" | "error"
     content: str | None = None
     card: CardData | None = None
+    questions: list[str] | None = None
     evidence: list[Evidence] | None = None
     conversation_id: str | None = None
     message_id: str | None = None
