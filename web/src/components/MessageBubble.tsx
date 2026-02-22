@@ -5,6 +5,7 @@ interface Message {
     id: string;
     role: string;
     content: string;
+    follow_ups?: string[];
     cards?: Array<{
         card_type: string;
         title: string;
@@ -136,6 +137,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCardAct
                             <ToolCard key={i} card={card} onAction={onCardAction} />
                         ))}
                         {message.content && renderMarkdown(message.content)}
+                        {message.follow_ups && message.follow_ups.length > 0 && onCardAction ? (
+                            <div className="follow-up-list">
+                                {message.follow_ups.map((q, i) => (
+                                    <button
+                                        key={`${message.id}-follow-${i}`}
+                                        className="follow-up-btn"
+                                        onClick={() => onCardAction(q)}
+                                    >
+                                        {q}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
                     </>
                 )}
             </div>

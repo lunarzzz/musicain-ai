@@ -37,6 +37,7 @@ def init_db() -> None:
             content         TEXT NOT NULL DEFAULT '',
             tool_calls      TEXT,
             cards           TEXT,
+            follow_ups      TEXT,
             evidence        TEXT,
             created_at      TEXT NOT NULL,
             FOREIGN KEY (conversation_id) REFERENCES conversation(id)
@@ -45,6 +46,12 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_msg_conv ON message(conversation_id);
         """
     )
+
+    # 兼容已存在的数据库（旧版本没有 follow_ups 列）
+    cols = conn.execute("PRAGMA table_info(message)").fetchall()
+    if not any(c[1] == "follow_ups" for c in cols):
+        conn.execute("ALTER TABLE message ADD COLUMN follow_ups TEXT")
+
     conn.commit()
     conn.close()
 
@@ -115,6 +122,7 @@ def save_message(
     content: str,
     tool_calls: list | None = None,
     cards: list | None = None,
+    follow_ups: list[str] | None = None,
     evidence: list | None = None,
 ) -> str:
     msg_id = uuid.uuid4().hex[:16]
@@ -122,8 +130,8 @@ def save_message(
     conn = _get_conn()
     conn.execute(
         """INSERT INTO message
-           (id, conversation_id, role, content, tool_calls, cards, evidence, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           (id, conversation_id, role, content, tool_calls, cards, follow_ups, evidence, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             msg_id,
             conversation_id,
@@ -131,6 +139,7 @@ def save_message(
             content,
             json.dumps(tool_calls) if tool_calls else None,
             json.dumps(cards) if cards else None,
+            json.dumps(follow_ups) if follow_ups else None,
             json.dumps(evidence) if evidence else None,
             now,
         ),
@@ -157,7 +166,7 @@ def get_messages(conversation_id: str, limit: int = 50) -> list[dict]:
     results = []
     for r in rows:
         d = dict(r)
-        for field in ("tool_calls", "cards", "evidence"):
+        for field in ("tool_calls", "cards", "follow_ups", "evidence"):
             if d.get(field):
                 d[field] = json.loads(d[field])
         results.append(d)

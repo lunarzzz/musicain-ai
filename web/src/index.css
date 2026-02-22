@@ -572,6 +572,31 @@ a:hover {
   font-size: 13px;
 }
 
+
+.follow-up-list {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.follow-up-btn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.follow-up-btn:hover {
+  border-color: var(--text-accent);
+  color: var(--text-accent);
+  background: var(--bg-accent-subtle);
+}
+
 /* ── 打字指示器 ── */
 .typing-indicator {
   display: flex;

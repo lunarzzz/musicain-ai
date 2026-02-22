@@ -210,6 +210,69 @@ def _extract_cards(tool_name: str, tool_result: dict) -> list[dict]:
     return cards
 
 
+def _parse_follow_ups(raw: str) -> list[str]:
+    """将 LLM 生成的后续问题解析为列表。"""
+    if not raw:
+        return []
+
+    text = raw.strip()
+    if not text:
+        return []
+
+    # 优先 JSON 格式
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            items = data.get("questions")
+        else:
+            items = data
+        if isinstance(items, list):
+            parsed = [str(i).strip() for i in items if str(i).strip()]
+            return parsed[:3]
+    except Exception:
+        pass
+
+    # 兜底：按行解析
+    result: list[str] = []
+    for line in text.splitlines():
+        cleaned = line.strip()
+        cleaned = cleaned.lstrip("-•")
+        cleaned = cleaned.strip()
+        cleaned = cleaned.removeprefix("1.").removeprefix("2.").removeprefix("3.").strip()
+        if cleaned:
+            result.append(cleaned)
+        if len(result) >= 3:
+            break
+    return result[:3]
+
+
+def _build_follow_up_prompt(user_msg: str, assistant_reply: str) -> str:
+    return f"""你是一个对话助手，请基于本轮问答生成 3 个简短的后续追问。
+要求：
+1) 必须和用户当前主题强相关，帮助用户继续探索。
+2) 每个问题 8-24 个中文字符，语气自然，避免重复。
+3) 不要出现解释文字。
+4) 仅返回 JSON 数组字符串，例如：[\"问题1\", \"问题2\", \"问题3\"]
+
+用户问题：{user_msg}
+助手回答：{assistant_reply}
+"""
+
+
+async def _generate_follow_ups(llm: ChatOpenAI, user_msg: str, assistant_reply: str) -> list[str]:
+    """生成后续追问建议。"""
+    if not assistant_reply.strip():
+        return []
+
+    prompt = _build_follow_up_prompt(user_msg, assistant_reply)
+    try:
+        resp = await llm.ainvoke([HumanMessage(content=prompt)])
+        return _parse_follow_ups(resp.content or "")
+    except Exception:
+        return []
+
+
+
 async def chat(user_msg: str, conversation_id: str | None = None) -> AsyncGenerator[str, None]:
     """处理用户消息，流式返回响应。
 
@@ -331,19 +394,29 @@ async def chat(user_msg: str, conversation_id: str | None = None) -> AsyncGenera
         }, ensure_ascii=False)
         yield f"data: {error_chunk}\n\n"
 
-    # 7. 保存助手消息
+    # 7. 生成并发送 follow-up 问题
+    follow_ups = await _generate_follow_ups(llm, user_msg, full_content)
+    if follow_ups:
+        follow_up_chunk = json.dumps({
+            "type": "follow_ups",
+            "questions": follow_ups,
+        }, ensure_ascii=False)
+        yield f"data: {follow_up_chunk}\n\n"
+
+    # 8. 保存助手消息
     db.save_message(
         conversation_id,
         "assistant",
         full_content,
         cards=[c for c in all_cards] if all_cards else None,
+        follow_ups=follow_ups if follow_ups else None,
     )
 
-    # 8. 更新会话标题（首次对话）
+    # 9. 更新会话标题（首次对话）
     if len(history) <= 1:
         db.update_conversation_title(conversation_id, _generate_title(user_msg))
 
-    # 9. 发送完成 chunk
+    # 10. 发送完成 chunk
     done_chunk = json.dumps({
         "type": "done",
         "conversation_id": conversation_id,
