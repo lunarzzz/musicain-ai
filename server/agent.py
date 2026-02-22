@@ -211,7 +211,7 @@ def _extract_cards(tool_name: str, tool_result: dict) -> list[dict]:
 
 
 def _parse_follow_ups(raw: str) -> list[str]:
-    """将 LLM 生成的后续问题解析为列表。"""
+    """将 LLM 生成的后续建议（问题或话题）解析为列表。"""
     if not raw:
         return []
 
@@ -223,7 +223,7 @@ def _parse_follow_ups(raw: str) -> list[str]:
     try:
         data = json.loads(text)
         if isinstance(data, dict):
-            items = data.get("questions")
+            items = data.get("suggestions") or data.get("questions") or data.get("topics")
         else:
             items = data
         if isinstance(items, list):
@@ -247,12 +247,16 @@ def _parse_follow_ups(raw: str) -> list[str]:
 
 
 def _build_follow_up_prompt(user_msg: str, assistant_reply: str) -> str:
-    return f"""你是一个对话助手，请基于本轮问答生成 3 个简短的后续追问。
+    return f"""你是一个对话助手，请基于本轮问答生成 3 条后续建议。
 要求：
 1) 必须和用户当前主题强相关，帮助用户继续探索。
-2) 每个问题 8-24 个中文字符，语气自然，避免重复。
-3) 不要出现解释文字。
-4) 仅返回 JSON 数组字符串，例如：[\"问题1\", \"问题2\", \"问题3\"]
+2) 根据语境自动选择输出形态：
+   - 如果用户明显还在探索/比较/决策，输出“追问句”（建议以问号结尾）。
+   - 如果本轮回答已较完整，输出“关联话题短语”（不加句号、不加解释，不写完整陈述句）。
+3) 三条保持同一风格（全是追问句或全是话题短语），避免重复。
+4) 追问句建议 8-24 个中文字符；话题短语建议 4-12 个中文字符。
+5) 不要出现解释文字。
+6) 仅返回 JSON 数组字符串，例如：[\"建议1\", \"建议2\", \"建议3\"]
 
 用户问题：{user_msg}
 助手回答：{assistant_reply}
