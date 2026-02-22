@@ -29,5 +29,10 @@ class Settings:
         os.path.join(os.path.dirname(__file__), "knowledge_base"),
     )
 
+    # --- RAGFlow ---
+    RAGFLOW_BASE_URL: str = os.getenv("RAGFLOW_BASE_URL", "http://localhost:9380")
+    RAGFLOW_API_KEY: str = os.getenv("RAGFLOW_API_KEY", "")
+    RAGFLOW_KB_ID: list[str] = os.getenv("RAGFLOW_KB_ID", "").split(",") if os.getenv("RAGFLOW_KB_ID") else []
+
 
 settings = Settings()

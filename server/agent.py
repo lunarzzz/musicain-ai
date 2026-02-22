@@ -24,7 +24,7 @@ from skill_loader import load_all_skills
 from tools.hot_trends import get_trending_topics, generate_song_inspiration, generate_promo_tags
 from tools.promotion import recommend_songs_to_promote, generate_promotion_plan, get_promotion_report
 from tools.analytics import get_audience_portrait, analyze_cross_platform, explain_metric_change
-from tools.knowledge import search_knowledge, check_upload_compliance
+from tools.knowledge import search_knowledge, check_upload_compliance, ragflow_search
 
 ALL_TOOLS = [
     get_trending_topics,
@@ -37,6 +37,7 @@ ALL_TOOLS = [
     analyze_cross_platform,
     explain_metric_change,
     search_knowledge,
+    ragflow_search,
     check_upload_compliance,
 ]
 
@@ -56,6 +57,7 @@ SYSTEM_PROMPT = """你是「腾讯音乐人 AI 助手」，一个专业的音乐
 ## 行为准则
 - **始终提供可执行的建议**，不要只给笼统的方向
 - **引用数据时标注来源和口径**，确保可信度
+- **对于规则、流程、FAQ等知识类问题，优先使用 ragflow_search 工具检索最权威文档**
 - **语气专业但亲切**，像一位资深的音乐行业前辈
 - **主动推荐下一步动作**，帮音乐人做到"闭环"
 - **当不确定时，诚实说明**并引导用户联系人工客服
@@ -199,7 +201,7 @@ def _extract_cards(tool_name: str, tool_result: dict) -> list[dict]:
             "actions": [],
         })
 
-    elif tool_name in ("search_knowledge", "check_upload_compliance"):
+    elif tool_name in ("search_knowledge", "check_upload_compliance", "ragflow_search"):
         cards.append({
             "card_type": "knowledge",
             "title": "📖 知识解答",

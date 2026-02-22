@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import httpx
 
 from langchain_core.tools import tool
+from config import settings
 
 # ── 知识库数据 (内联 Mock，替代 FAISS 向量检索) ──────────
 
@@ -294,3 +296,75 @@ def _guess_category(text: str) -> str | None:
         if any(kw in text for kw in kws):
             return cat
     return "入驻"
+
+
+@tool
+async def ragflow_search(query: str, top_k: int = 5) -> dict:
+    """使用 RAGFlow 检索官方客服及操作指南文档。
+    如果配置了 RAGFLOW_API_KEY，将调用真实的 RAGFlow 服务。
+    否则将回退到本地的 search_knowledge 机制。
+
+    参数:
+        query: 用户的问题
+        top_k: 返回的最大文档片段数
+    """
+    if not settings.RAGFLOW_API_KEY:
+        # 如果没有配置 API Key，回退到本地检索
+        fallback_result = search_knowledge.invoke({"query": query, "category": "all"})
+        fallback_result["note"] = "⚠️ 当前未配置 RAGFlow API Key，已回退到本地基础 FAQ 检索。"
+        return fallback_result
+
+    url = f"{settings.RAGFLOW_BASE_URL.rstrip('/')}/api/v1/retrieval"
+    headers = {
+        "Authorization": f"Bearer {settings.RAGFLOW_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "question": query,
+        "dataset_ids": settings.RAGFLOW_KB_ID,
+        "top_k": top_k
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, headers=headers, json=payload, timeout=10.0)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("code") == 0:
+                chunks = data.get("data", {}).get("chunks", [])
+                results = []
+                for chunk in chunks:
+                    results.append({
+                        "category": "RAGFlow",
+                        "question": "匹配到的相关文档片段",
+                        "answer": chunk.get("content", ""),
+                        "source": chunk.get("document_name", "未知来源"),
+                        "relevance": "high",
+                    })
+                
+                # 若 RAG 没搜到，可用兜底
+                if not results:
+                    return {
+                        "query": query,
+                        "results": [],
+                        "total_found": 0,
+                        "note": "RAGFlow 知识库中未找到相关内容，请尝试换个关键词或联系人工客服。"
+                    }
+
+                return {
+                    "query": query,
+                    "results": results[:top_k],
+                    "total_found": len(results),
+                    "note": "以上信息来自官方文档库，仅供参考。"
+                }
+            else:
+                raise ValueError(f"RAGFlow API Error: {data.get('message', 'Unknown error')}")
+
+    except Exception as e:
+        return {
+            "query": query,
+            "results": [],
+            "error": str(e),
+            "note": "调用 RAGFlow 时发生错误，请稍后再试或联系管理员。"
+        }
